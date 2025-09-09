@@ -205,7 +205,7 @@ Optionally provide CUSTOM-PROMPT."
                 (display-buffer temp-buffer))))
           (unless (string-empty-p summary-text)
             (kill-buffer temp-buffer)))
-      (error "Path '%s' does not exist." path-expanded))))
+      (error "Path '%s' does not exist." path-expanded)))))
 
 (provide 'org-meeting-summarizer)
 ;;; org-meeting-summarizer.el ends here

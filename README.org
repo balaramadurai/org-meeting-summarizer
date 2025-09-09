@@ -2,19 +2,14 @@
 :PROPERTIES:
 :CUSTOM_ID: org-meeting-summarizer
 :END:
-=org-meeting-summarizer= is an Emacs package for recording audio
-meetings as =.m4a= files using =ffmpeg=, summarizing them using the
-Gemini API, and inserting the summaries into an Org-mode subtree.
-Summaries are formatted with a bold =**Summary for ...**= title and do
-not fold the subtree.
+=org-meeting-summarizer= is an Emacs package for recording audio meetings as =.m4a= files using =ffmpeg=, summarizing them using the Gemini API, and inserting the summaries into an Org-mode subtree. Summaries are formatted with a bold =**Summary for ...**= title and do not fold the subtree.
 
 ** Features
 :PROPERTIES:
 :CUSTOM_ID: features
 :END:
 - Record audio meetings directly in Emacs using =ffmpeg=.
-- Summarize =.m4a= files using the Gemini API with a customizable
-  prompt.
+- Summarize =.m4a= files using the Gemini API with a customizable prompt.
 - Insert summaries into Org-mode subtrees with bold titles.
 - Display a countdown timer during recording.
 - Handle API rate limits with retries.
@@ -44,22 +39,63 @@ not fold the subtree.
   pip install google-generative-ai
   #+end_src
 
-- *Gemini API key*: Obtain from
-  [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com][Google
-  Cloud Console]].
+- *Gemini API key*: Obtain from [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com][Google Cloud Console]].
 
-*** Steps
+*** Using =use-package= with =straight.el=
 :PROPERTIES:
-:CUSTOM_ID: steps
+:CUSTOM_ID: using-use-package-with-straight.el
+:END:
+If you use =use-package= and =straight.el= for package management, add the following to your =~/.emacs= or =init.el=:
+
+#+begin_src emacs-lisp
+(use-package org-meeting-summarizer
+  :straight (org-meeting-summarizer
+             :type git
+             :host github
+             :repo "balaramadurai/org-meeting-summarizer")
+  :custom
+  (org-meeting-summarizer-api-key (getenv "GEMINI_API_KEY"))
+  (org-meeting-summarizer-script-path
+   (expand-file-name "scripts/summarize_meetings.py"
+                     (straight--repos-dir "org-meeting-summarizer")))
+  (org-meeting-summarizer-model "gemini-2.5-flash")
+  (org-meeting-summarizer-retry-delay 60))
+#+end_src
+
+Ensure =straight.el= is set up in your Emacs configuration. If not, add:
+
+#+begin_src emacs-lisp
+(defvar bootstrap-version)
+(let ((bootstrap-file
+       (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
+      (bootstrap-version 6))
+  (unless (file-exists-p bootstrap-file)
+    (with-current-buffer
+        (url-retrieve-synchronously
+         "https://raw.githubusercontent.com/radian-software/straight.el/develop/install.el"
+         'silent 'inhibit-cookies)
+      (goto-char (point-max))
+      (eval-print-last-sexp)))
+  (load bootstrap-file nil 'nomessage))
+#+end_src
+
+Set your Gemini API key in your shell:
+
+#+begin_src sh
+export GEMINI_API_KEY="your-api-key"
+#+end_src
+
+*** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
 :END:
 1. *Clone or download the package*:
 
    #+begin_src sh
-   git clone https://github.com/yourusername/org-meeting-summarizer.git
+   git clone https://github.com/balaramadurai/org-meeting-summarizer.git
    #+end_src
 
-   Or download and extract the package to
-   =~/.emacs.d/org-meeting-summarizer/=.
+   Or download and extract to =~/.emacs.d/org-meeting-summarizer/=.
 
 2. *Add to Emacs load path*:
 
@@ -67,7 +103,8 @@ not fold the subtree.
    (add-to-list 'load-path "~/.emacs.d/org-meeting-summarizer/")
    #+end_src
 
-3. *Configure the package*: Add to your =~/.emacs= or =init.el=:
+3. *Configure the package*:
+   Add to your =~/.emacs= or =init.el=:
 
    #+begin_src emacs-lisp
    (require 'org-meeting-summarizer)
@@ -77,7 +114,7 @@ not fold the subtree.
    (setq org-meeting-summarizer-retry-delay 60)
    #+end_src
 
-4. *Set your Gemini API key*: Export it in your shell:
+4. *Set your Gemini API key*:
 
    #+begin_src sh
    export GEMINI_API_KEY="your-api-key"
@@ -94,8 +131,8 @@ not fold the subtree.
 1. Open an Org-mode file with a subtree:
 
    #+begin_src org
-   ,* Meeting Notes
-     - Date: 2025-09-08
+   * Meeting Notes
+     - Date: 2025-09-09
      - Agenda: Team sync
    #+end_src
 
@@ -103,24 +140,20 @@ not fold the subtree.
 
 3. Provide:
 
-   - *Output File*: e.g.,
-     =/home/bala/Documents/0Inbox/recording_20250908.m4a=.
-   - *Duration*: e.g., =30= seconds (or =0= for manual stop with
-     =M-x org-meeting-summarizer-stop-recording=).
-   - *Custom Prompt*: Press Enter for default
-     (="summarize this meeting under date|title with attendees, notes and action items"=).
+   - *Output File*: e.g., =/home/bala/Documents/0Inbox/recording_20250909.m4a=.
+   - *Duration*: e.g., =30= seconds (or =0= for manual stop with =M-x org-meeting-summarizer-stop-recording=).
+   - *Custom Prompt*: Press Enter for default (="summarize this meeting under date|title with attendees, notes and action items"=).
 
-4. The countdown timer displays in the minibuffer (e.g., "Recording to
-   ...: 30 seconds remaining...").
+4. The countdown timer displays in the minibuffer (e.g., "Recording to ...: 30 seconds remaining...").
 
 5. The summary is inserted:
 
    #+begin_src org
-   ,* Meeting Notes
-     - Date: 2025-09-08
+   * Meeting Notes
+     - Date: 2025-09-09
      - Agenda: Team sync
-     ,**Summary for recording_20250908.m4a**
-     - Date: 2025-09-08
+     **Summary for recording_20250909.m4a**
+     - Date: 2025-09-09
      - Title: Team Discussion
      - Attendees: [Your name]
      - Notes: ...
@@ -141,21 +174,19 @@ not fold the subtree.
 :PROPERTIES:
 :CUSTOM_ID: stop-recording
 :END:
-- Run =M-x org-meeting-summarizer-stop-recording= to stop a manual
-  recording.
+- Run =M-x org-meeting-summarizer-stop-recording= to stop a manual recording.
 
 ** Troubleshooting
 :PROPERTIES:
 :CUSTOM_ID: troubleshooting
 :END:
 - *Timer Errors*:
-  - If you see =void-variable= errors, ensure the latest
-    =org-meeting-summarizer.el= is loaded.
+  - If you see =void-variable= errors, ensure the latest =org-meeting-summarizer.el= is loaded.
   - Check =*Messages*= for details.
 - *Path Errors*:
-  - If =Path ... does not exist.= appears, verify the file exists
-    (=ls /home/bala/Documents/0Inbox/test.m4a=) and check =*Messages*=
-    for =Checking path: ...=.
+  - If =Path ... does not exist.= appears, verify the file exists (=ls /home/bala/Documents/0Inbox/test.m4a=) and check =*Messages*= for =Checking path: ...= and =Verifying recorded file: ...=.
+  - Ensure the file isn't deleted post-recording by external processes.
+  - Run =M-x org-meeting-summarizer= with the file path and check =*Meeting Summaries*=.
 - *Partial Summaries*:
   - Test the Python script standalone:
 
@@ -163,24 +194,28 @@ not fold the subtree.
     python3 ~/.emacs.d/org-meeting-summarizer/scripts/summarize_meetings.py "/home/bala/Documents/0Inbox/test.m4a" --api_key "YOUR_API_KEY" --model "gemini-2.5-flash"
     #+end_src
 
-  - Check your Gemini API quota in the
-    [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas][Google
-    Cloud Console]].
+  - Check your Gemini API quota in the [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas][Google Cloud Console]].
 
-  - Increase =org-meeting-summarizer-retry-delay= to =60= or enable
-    billing for higher limits.
+  - Increase =org-meeting-summarizer-retry-delay= to =60= or enable billing for higher limits.
 
 - *Bold Formatting*:
-  - Ensure summaries start with =**Summary for ...**=. If not, verify
-    the Python script is updated.
+  - Ensure summaries start with =**Summary for ...**=. If not, verify the Python script is updated.
 - *Debugging*:
   - Check =*Messages*= for:
     - =Checking path: ...=
     - =Recording to ...: X seconds remaining...=
+    - =Verifying recorded file: ...=
     - =Raw output in *Temp Meeting Summaries*: ...=
     - =Processing line: ...=
     - =Captured summary text: ...=
+    - =Warning: Recorded file ... not found after process exit=
   - Inspect =*Temp Meeting Summaries*= or =*Meeting Summaries*= buffers.
+
+** Credits
+:PROPERTIES:
+:CUSTOM_ID: credits
+:END:
+This package was developed with assistance from Grok, an AI created by xAI, which helped generate and refine the code.
 
 ** License
 :PROPERTIES:
@@ -192,11 +227,10 @@ MIT License. See =LICENSE= file for details.
 :PROPERTIES:
 :CUSTOM_ID: contributing
 :END:
-Contributions are welcome! Submit pull requests or issues to
-[[https://github.com/yourusername/org-meeting-summarizer][GitHub]].
+Contributions are welcome! Submit pull requests or issues to [[https://github.com/balaramadurai/org-meeting-summarizer][GitHub]].
 
 ** Contact
 :PROPERTIES:
 :CUSTOM_ID: contact
 :END:
-For support, contact [[mailto:bala@balaramadurai.net][bala@balaramadurai.net]]
+For support, contact [[mailto:bala@balaramadurai.net][bala@balaramadurai.net]] or [[https://github.com/balaramadurai][GitHub]].
