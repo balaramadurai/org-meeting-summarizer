@@ -56,7 +56,7 @@ If you use =use-package= and =straight.el= for package management, add the follo
   :custom
   (org-meeting-summarizer-api-key (getenv "GEMINI_API_KEY"))
   (org-meeting-summarizer-script-path
-   (expand-file-name "scripts/summarize_meetings.py"
+   (expand-file-name "summarize_meetings.py"
                      (straight--repos-dir "org-meeting-summarizer")))
   (org-meeting-summarizer-model "gemini-2.5-flash")
   (org-meeting-summarizer-retry-delay 60))
