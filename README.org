@@ -11,7 +11,9 @@
 - Record audio meetings directly in Emacs using =ffmpeg=.
 - Summarize =.m4a= files using the Gemini API with a customizable prompt.
 - Insert summaries into Org-mode subtrees with bold titles.
-- Display a countdown timer during recording.
+- Display a countdown timer during recording (for fixed durations).
+- Automatically summarize after stopping manual recordings.
+- Optional Hydra menu for interactive command access.
 - Handle API rate limits with retries.
 - MIT-licensed for open use and modification.
 
@@ -40,6 +42,12 @@
   #+end_src
 
 - *Gemini API key*: Obtain from [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com][Google Cloud Console]].
+
+- *Hydra* (optional, for interactive menu):
+
+  #+begin_src emacs-lisp
+  (use-package hydra :straight t)
+  #+end_src
 
 *** Setting Environment Variables
 :PROPERTIES:
@@ -134,7 +142,18 @@ Add to your =~/.emacs= or =init.el=:
    (expand-file-name "scripts/summarize_meetings.py"
                      (straight--repos-dir "org-meeting-summarizer")))
   (org-meeting-summarizer-model "gemini-2.5-flash")
-  (org-meeting-summarizer-retry-delay 60))
+  (org-meeting-summarizer-retry-delay 60)
+  :config
+  ;; Optional: Enable Hydra menu
+  (when (featurep 'hydra)
+    (global-set-key (kbd "C-c m") 'org-meeting-summarizer-hydra/body)))
+#+end_src
+
+If you want to use the optional Hydra menu, add:
+
+#+begin_src emacs-lisp
+(use-package hydra
+  :straight t)
 #+end_src
 
 Ensure =straight.el= is set up:
@@ -181,15 +200,30 @@ Ensure =straight.el= is set up:
    (setq org-meeting-summarizer-script-path "~/.emacs.d/org-meeting-summarizer/scripts/summarize_meetings.py")
    (setq org-meeting-summarizer-model "gemini-2.5-flash")
    (setq org-meeting-summarizer-retry-delay 60)
+   ;; Optional: Enable Hydra menu
+   (when (featurep 'hydra)
+     (global-set-key (kbd "C-c m") 'org-meeting-summarizer-hydra/body))
    #+end_src
 
 4. *Set your Gemini API key*:
    See "Setting Environment Variables" above.
 
+5. *Optional: Install Hydra*:
+
+   #+begin_src emacs-lisp
+   (use-package hydra :straight t)
+   #+end_src
+
 ** Usage
 :PROPERTIES:
 :CUSTOM_ID: usage
 :END:
+*** Optional Hydra Menu
+:PROPERTIES:
+:CUSTOM_ID: optional-hydra-menu
+:END:
+To use an interactive menu, install Hydra and run =M-x org-meeting-summarizer-hydra= or press =C-c m=: - =r=: Record and summarize (=org-meeting-summarizer-record-and-summarize=). - =s=: Summarize an existing file (=org-meeting-summarizer-in-subtree=). - =t=: Stop recording (=org-meeting-summarizer-stop-recording=). - =q=: Quit the Hydra.
+
 *** Record and Summarize
 :PROPERTIES:
 :CUSTOM_ID: record-and-summarize
@@ -202,17 +236,19 @@ Ensure =straight.el= is set up:
      - Agenda: Team sync
    #+end_src
 
-2. Run =M-x org-meeting-summarizer-record-and-summarize=.
+2. Run =M-x org-meeting-summarizer-record-and-summarize= (or =C-c m r= with Hydra).
 
 3. Provide:
 
    - *Output File*: e.g., =/home/bala/Documents/0Inbox/recording_20250909.m4a=.
-   - *Duration*: e.g., =30= seconds (or =0= for manual stop with =M-x org-meeting-summarizer-stop-recording=).
+   - *Duration*: e.g., =30= seconds (or =0= for manual stop).
    - *Custom Prompt*: Press Enter for default (="summarize this meeting under date|title with attendees, notes and action items"=).
 
-4. The countdown timer displays in the minibuffer (e.g., "Recording to ...: 30 seconds remaining...").
+4. For fixed duration (=> 0=), the countdown timer displays (e.g., "Recording to ...: 30 seconds remaining..."), and summarization happens automatically.
 
-5. The summary is inserted:
+5. For manual stop (=0=), stop with =M-x org-meeting-summarizer-stop-recording= (or =C-c m t= with Hydra), and summarization happens automatically.
+
+6. The summary is inserted:
 
    #+begin_src org
    * Meeting Notes
@@ -230,7 +266,7 @@ Ensure =straight.el= is set up:
 :PROPERTIES:
 :CUSTOM_ID: summarize-an-existing-file
 :END:
-1. Run =M-x org-meeting-summarizer-in-subtree=.
+1. Run =M-x org-meeting-summarizer-in-subtree= (or =C-c m s= with Hydra).
 2. Provide:
    - *Path*: e.g., =/home/bala/Documents/0Inbox/test.m4a=.
    - *Custom Prompt*: Optional.
@@ -240,7 +276,7 @@ Ensure =straight.el= is set up:
 :PROPERTIES:
 :CUSTOM_ID: stop-recording
 :END:
-- Run =M-x org-meeting-summarizer-stop-recording= to stop a manual recording.
+- Run =M-x org-meeting-summarizer-stop-recording= (or =C-c m t= with Hydra) to stop a manual recording.
 
 ** Troubleshooting
 :PROPERTIES:
@@ -250,8 +286,9 @@ Ensure =straight.el= is set up:
   - If =(getenv "GEMINI_API_KEY")= returns =nil=, verify your setup using the "Setting Environment Variables" steps.
   - Run =M-x eval-expression RET (getenv "GEMINI_API_KEY")= to test.
   - Ensure =exec-path-from-shell= is loaded before =org-meeting-summarizer= if used.
+  - If the key is missing, commands will fail with errors like =GEMINI_API_KEY is not set=.
 - *Path Errors*:
-  - If =Path ... does not exist.= appears, verify the file exists (=ls /home/bala/Documents/0Inbox/test.m4a=) and check =*Messages*= for =Checking path: ...= and =Verifying recorded file: ...=.
+  - If =Path ... does not exist.= appears, verify the file exists (=ls /home/bala/Documents/0Inbox/test.m4a=) and check =*Messages*= for =Checking path: ...=, =Verifying recorded file: ...=, or =Warning: Recorded file ... not found after process exit=.
   - Ensure the file isn't deleted post-recording by external processes.
   - Run =M-x org-meeting-summarizer= with the file path and check =*Meeting Summaries*=.
 - *Partial Summaries*:
@@ -272,6 +309,7 @@ Ensure =straight.el= is set up:
     - =Checking path: ...=
     - =Recording to ...: X seconds remaining...=
     - =Verifying recorded file: ...=
+    - =File ... not found, retrying ...=
     - =Raw output in *Temp Meeting Summaries*: ...=
     - =Processing line: ...=
     - =Captured summary text: ...=
