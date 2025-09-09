@@ -1,0 +1,202 @@
+* Org Meeting Summarizer
+:PROPERTIES:
+:CUSTOM_ID: org-meeting-summarizer
+:END:
+=org-meeting-summarizer= is an Emacs package for recording audio
+meetings as =.m4a= files using =ffmpeg=, summarizing them using the
+Gemini API, and inserting the summaries into an Org-mode subtree.
+Summaries are formatted with a bold =**Summary for ...**= title and do
+not fold the subtree.
+
+** Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+- Record audio meetings directly in Emacs using =ffmpeg=.
+- Summarize =.m4a= files using the Gemini API with a customizable
+  prompt.
+- Insert summaries into Org-mode subtrees with bold titles.
+- Display a countdown timer during recording.
+- Handle API rate limits with retries.
+- MIT-licensed for open use and modification.
+
+** Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+*** Prerequisites
+:PROPERTIES:
+:CUSTOM_ID: prerequisites
+:END:
+- *Emacs*: Version 26.1 or higher (Org-mode included).
+
+- *Python*: Version 3.6 or higher.
+
+- *ffmpeg*: For recording audio.
+
+  #+begin_src sh
+  sudo apt-get install ffmpeg  # On Ubuntu/Debian
+  #+end_src
+
+- *Google Generative AI Python package*:
+
+  #+begin_src sh
+  pip install google-generative-ai
+  #+end_src
+
+- *Gemini API key*: Obtain from
+  [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com][Google
+  Cloud Console]].
+
+*** Steps
+:PROPERTIES:
+:CUSTOM_ID: steps
+:END:
+1. *Clone or download the package*:
+
+   #+begin_src sh
+   git clone https://github.com/yourusername/org-meeting-summarizer.git
+   #+end_src
+
+   Or download and extract the package to
+   =~/.emacs.d/org-meeting-summarizer/=.
+
+2. *Add to Emacs load path*:
+
+   #+begin_src emacs-lisp
+   (add-to-list 'load-path "~/.emacs.d/org-meeting-summarizer/")
+   #+end_src
+
+3. *Configure the package*: Add to your =~/.emacs= or =init.el=:
+
+   #+begin_src emacs-lisp
+   (require 'org-meeting-summarizer)
+   (setq org-meeting-summarizer-api-key (getenv "GEMINI_API_KEY"))
+   (setq org-meeting-summarizer-script-path "~/.emacs.d/org-meeting-summarizer/scripts/summarize_meetings.py")
+   (setq org-meeting-summarizer-model "gemini-2.5-flash")
+   (setq org-meeting-summarizer-retry-delay 60)
+   #+end_src
+
+4. *Set your Gemini API key*: Export it in your shell:
+
+   #+begin_src sh
+   export GEMINI_API_KEY="your-api-key"
+   #+end_src
+
+** Usage
+:PROPERTIES:
+:CUSTOM_ID: usage
+:END:
+*** Record and Summarize
+:PROPERTIES:
+:CUSTOM_ID: record-and-summarize
+:END:
+1. Open an Org-mode file with a subtree:
+
+   #+begin_src org
+   ,* Meeting Notes
+     - Date: 2025-09-08
+     - Agenda: Team sync
+   #+end_src
+
+2. Run =M-x org-meeting-summarizer-record-and-summarize=.
+
+3. Provide:
+
+   - *Output File*: e.g.,
+     =/home/bala/Documents/0Inbox/recording_20250908.m4a=.
+   - *Duration*: e.g., =30= seconds (or =0= for manual stop with
+     =M-x org-meeting-summarizer-stop-recording=).
+   - *Custom Prompt*: Press Enter for default
+     (="summarize this meeting under date|title with attendees, notes and action items"=).
+
+4. The countdown timer displays in the minibuffer (e.g., "Recording to
+   ...: 30 seconds remaining...").
+
+5. The summary is inserted:
+
+   #+begin_src org
+   ,* Meeting Notes
+     - Date: 2025-09-08
+     - Agenda: Team sync
+     ,**Summary for recording_20250908.m4a**
+     - Date: 2025-09-08
+     - Title: Team Discussion
+     - Attendees: [Your name]
+     - Notes: ...
+     - Action Items: ...
+   #+end_src
+
+*** Summarize an Existing File
+:PROPERTIES:
+:CUSTOM_ID: summarize-an-existing-file
+:END:
+1. Run =M-x org-meeting-summarizer-in-subtree=.
+2. Provide:
+   - *Path*: e.g., =/home/bala/Documents/0Inbox/test.m4a=.
+   - *Custom Prompt*: Optional.
+3. The summary is inserted as above.
+
+*** Stop Recording
+:PROPERTIES:
+:CUSTOM_ID: stop-recording
+:END:
+- Run =M-x org-meeting-summarizer-stop-recording= to stop a manual
+  recording.
+
+** Troubleshooting
+:PROPERTIES:
+:CUSTOM_ID: troubleshooting
+:END:
+- *Timer Errors*:
+  - If you see =void-variable= errors, ensure the latest
+    =org-meeting-summarizer.el= is loaded.
+  - Check =*Messages*= for details.
+- *Path Errors*:
+  - If =Path ... does not exist.= appears, verify the file exists
+    (=ls /home/bala/Documents/0Inbox/test.m4a=) and check =*Messages*=
+    for =Checking path: ...=.
+- *Partial Summaries*:
+  - Test the Python script standalone:
+
+    #+begin_src sh
+    python3 ~/.emacs.d/org-meeting-summarizer/scripts/summarize_meetings.py "/home/bala/Documents/0Inbox/test.m4a" --api_key "YOUR_API_KEY" --model "gemini-2.5-flash"
+    #+end_src
+
+  - Check your Gemini API quota in the
+    [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas][Google
+    Cloud Console]].
+
+  - Increase =org-meeting-summarizer-retry-delay= to =60= or enable
+    billing for higher limits.
+
+- *Bold Formatting*:
+  - Ensure summaries start with =**Summary for ...**=. If not, verify
+    the Python script is updated.
+- *Debugging*:
+  - Check =*Messages*= for:
+    - =Checking path: ...=
+    - =Recording to ...: X seconds remaining...=
+    - =Raw output in *Temp Meeting Summaries*: ...=
+    - =Processing line: ...=
+    - =Captured summary text: ...=
+  - Inspect =*Temp Meeting Summaries*= or =*Meeting Summaries*= buffers.
+
+** License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+MIT License. See =LICENSE= file for details.
+
+** Contributing
+:PROPERTIES:
+:CUSTOM_ID: contributing
+:END:
+Contributions are welcome! Submit pull requests or issues to
+[[https://github.com/yourusername/org-meeting-summarizer][GitHub]].
+
+** Contact
+:PROPERTIES:
+:CUSTOM_ID: contact
+:END:
+For support, contact [your email or GitHub profile].
