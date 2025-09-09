@@ -199,4 +199,4 @@ Contributions are welcome! Submit pull requests or issues to
 :PROPERTIES:
 :CUSTOM_ID: contact
 :END:
-For support, contact [your email or GitHub profile].
+For support, contact [[mailto:bala@balaramadurai.net][bala@balaramadurai.net]]
