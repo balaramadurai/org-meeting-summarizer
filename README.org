@@ -41,13 +41,88 @@
 
 - *Gemini API key*: Obtain from [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com][Google Cloud Console]].
 
+*** Setting Environment Variables
+:PROPERTIES:
+:CUSTOM_ID: setting-environment-variables
+:END:
+The package requires the =GEMINI_API_KEY= environment variable to be accessible in Emacs via =(getenv "GEMINI_API_KEY")=. If =M-x eval-expression RET (getenv "GEMINI_API_KEY")= returns =nil=, but =echo $GEMINI_API_KEY= in your shell (e.g., =zsh=) shows the key, Emacs isn't inheriting your shell's environment. Here are several ways to fix this:
+
+**** Option 1: Use =exec-path-from-shell= (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: option-1-use-exec-path-from-shell-recommended
+:END:
+Install the =exec-path-from-shell= package to import environment variables from your shell (e.g., =zsh=) into Emacs:
+
+#+begin_src emacs-lisp
+(use-package exec-path-from-shell
+  :straight t
+  :config
+  (exec-path-from-shell-initialize))
+#+end_src
+
+Set =GEMINI_API_KEY= in your =~/.zshrc= or =~/.zshenv=:
+
+#+begin_src sh
+export GEMINI_API_KEY="your-api-key"
+#+end_src
+
+Source the file or restart your shell:
+
+#+begin_src sh
+source ~/.zshrc  # or source ~/.zshenv
+#+end_src
+
+**** Option 2: Set in =~/.zshenv=
+:PROPERTIES:
+:CUSTOM_ID: option-2-set-in-.zshenv
+:END:
+Add to =~/.zshenv= to make the variable available to all =zsh= sessions, including those used by GUI apps like Emacs:
+
+#+begin_src sh
+export GEMINI_API_KEY="your-api-key"
+#+end_src
+
+Source the file or restart your shell:
+
+#+begin_src sh
+source ~/.zshenv
+#+end_src
+
+**** Option 3: Launch Emacs from Terminal
+:PROPERTIES:
+:CUSTOM_ID: option-3-launch-emacs-from-terminal
+:END:
+Start Emacs from a =zsh= terminal where the variable is set:
+
+#+begin_src sh
+export GEMINI_API_KEY="your-api-key"
+emacs
+#+end_src
+
+**** Option 4: Set in Emacs
+:PROPERTIES:
+:CUSTOM_ID: option-4-set-in-emacs
+:END:
+Hardcode the variable in your =~/.emacs= or =init.el=:
+
+#+begin_src emacs-lisp
+(setenv "GEMINI_API_KEY" "your-api-key")
+#+end_src
+
+*Note*: If using =exec-path-from-shell=, ensure it's loaded before =org-meeting-summarizer= in your Emacs configuration. For =zsh= users, setting the variable in =~/.zshenv= is often the most reliable for GUI-launched Emacs.
+
 *** Using =use-package= with =straight.el=
 :PROPERTIES:
 :CUSTOM_ID: using-use-package-with-straight.el
 :END:
-If you use =use-package= and =straight.el= for package management, add the following to your =~/.emacs= or =init.el=:
+Add to your =~/.emacs= or =init.el=:
 
 #+begin_src emacs-lisp
+(use-package exec-path-from-shell
+  :straight t
+  :config
+  (exec-path-from-shell-initialize))
+
 (use-package org-meeting-summarizer
   :straight (org-meeting-summarizer
              :type git
@@ -56,13 +131,13 @@ If you use =use-package= and =straight.el= for package management, add the follo
   :custom
   (org-meeting-summarizer-api-key (getenv "GEMINI_API_KEY"))
   (org-meeting-summarizer-script-path
-   (expand-file-name "summarize_meetings.py"
+   (expand-file-name "scripts/summarize_meetings.py"
                      (straight--repos-dir "org-meeting-summarizer")))
   (org-meeting-summarizer-model "gemini-2.5-flash")
   (org-meeting-summarizer-retry-delay 60))
 #+end_src
 
-Ensure =straight.el= is set up in your Emacs configuration. If not, add:
+Ensure =straight.el= is set up:
 
 #+begin_src emacs-lisp
 (defvar bootstrap-version)
@@ -77,12 +152,6 @@ Ensure =straight.el= is set up in your Emacs configuration. If not, add:
       (goto-char (point-max))
       (eval-print-last-sexp)))
   (load bootstrap-file nil 'nomessage))
-#+end_src
-
-Set your Gemini API key in your shell:
-
-#+begin_src sh
-export GEMINI_API_KEY="your-api-key"
 #+end_src
 
 *** Manual Installation
@@ -115,10 +184,7 @@ export GEMINI_API_KEY="your-api-key"
    #+end_src
 
 4. *Set your Gemini API key*:
-
-   #+begin_src sh
-   export GEMINI_API_KEY="your-api-key"
-   #+end_src
+   See "Setting Environment Variables" above.
 
 ** Usage
 :PROPERTIES:
@@ -180,9 +246,10 @@ export GEMINI_API_KEY="your-api-key"
 :PROPERTIES:
 :CUSTOM_ID: troubleshooting
 :END:
-- *Timer Errors*:
-  - If you see =void-variable= errors, ensure the latest =org-meeting-summarizer.el= is loaded.
-  - Check =*Messages*= for details.
+- *Environment Variables*:
+  - If =(getenv "GEMINI_API_KEY")= returns =nil=, verify your setup using the "Setting Environment Variables" steps.
+  - Run =M-x eval-expression RET (getenv "GEMINI_API_KEY")= to test.
+  - Ensure =exec-path-from-shell= is loaded before =org-meeting-summarizer= if used.
 - *Path Errors*:
   - If =Path ... does not exist.= appears, verify the file exists (=ls /home/bala/Documents/0Inbox/test.m4a=) and check =*Messages*= for =Checking path: ...= and =Verifying recorded file: ...=.
   - Ensure the file isn't deleted post-recording by external processes.
@@ -191,7 +258,7 @@ export GEMINI_API_KEY="your-api-key"
   - Test the Python script standalone:
 
     #+begin_src sh
-    python3 ~/.emacs.d/org-meeting-summarizer/scripts/summarize_meetings.py "/home/bala/Documents/0Inbox/test.m4a" --api_key "YOUR_API_KEY" --model "gemini-2.5-flash"
+    python3 ~/.emacs.d/straight/repos/org-meeting-summarizer/scripts/summarize_meetings.py "/home/bala/Documents/0Inbox/test.m4a" --api_key "YOUR_API_KEY" --model "gemini-2.5-flash"
     #+end_src
 
   - Check your Gemini API quota in the [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas][Google Cloud Console]].
