@@ -43,12 +43,14 @@
   :type 'integer
   :group 'org-meeting-summarizer)
 
-(defun org-meeting-summarizer-record-audio-to-m4a (output-file duration)
-  "Record audio using ffmpeg and save to OUTPUT-FILE (.m4a) for DURATION seconds.
-If DURATION is nil or 0, record until manually stopped with M-x org-meeting-summarizer-stop-recording."
-  (interactive "FFile to save recording (e.g., ~/Documents/0Inbox/recording.m4a): \nNDuration in seconds (0 for manual stop): ")
-  (let* ((output-file-expanded (expand-file-name output-file))
-         (command (if (and duration (> duration 0))
+;; Internal function: record audio (called programmatically, no interactive form)
+(defun org-meeting-summarizer--record-audio-internal (output-file-expanded duration org-buffer custom-prompt)
+  "Internal function to record audio and handle process sentinel.
+OUTPUT-FILE-EXPANDED: expanded file path
+DURATION: recording duration in seconds (0 for manual stop)
+ORG-BUFFER: buffer to auto-summarize into
+CUSTOM-PROMPT: optional custom prompt for summarization"
+  (let* ((command (if (and duration (> duration 0))
                       (format "ffmpeg -f alsa -i default -t %d -c:a aac %s" duration output-file-expanded)
                     (format "ffmpeg -f alsa -i default -c:a aac %s" output-file-expanded)))
          (process-name "audio-recording")
@@ -61,33 +63,81 @@ If DURATION is nil or 0, record until manually stopped with M-x org-meeting-summ
         (error "Directory '%s' is not writable" (file-name-directory output-file-expanded))))
     (let ((process (start-process-shell-command process-name nil command)))
       (if (and duration (> duration 0))
-          (let ((timer (run-at-time
-                        0 1
-                        (lambda ()
-                          (if (> remaining 0)
-                              (progn
-                                (message "Recording to '%s': %d seconds remaining..." output-file-expanded remaining)
-                                (setq remaining (1- remaining)))
-                            (message "Recording saved to '%s'" output-file-expanded)
-                            (cancel-timer timer)))
-                        output-file-expanded)))
+          ;; Fixed duration recording with countdown spinner
+          (let ((timer nil)
+                (spinner (vector "⏺ " "◑ " "◕ " "◐ "))
+                (spin-index 0))
+            (setq timer
+              (run-at-time
+               0 1
+               (lambda ()
+                 (if (> remaining 0)
+                     (progn
+                       (message "%s [%02d:%02d] Recording '%s'"
+                                (aref spinner (mod spin-index 4))
+                                (/ remaining 60)
+                                (mod remaining 60)
+                                (file-name-nondirectory output-file-expanded))
+                       (setq spin-index (1+ spin-index))
+                       (setq remaining (1- remaining)))
+                   (message "✅ Recording saved '%s'" (file-name-nondirectory output-file-expanded))
+                   (cancel-timer timer)))))
             (set-process-sentinel
              process
              (lambda (proc event)
                (when (string-match-p "exited" event)
                  (cancel-timer timer)
-                 (message "Recording saved to '%s'" output-file-expanded)
+                 (message "✅ Recording saved '%s'" (file-name-nondirectory output-file-expanded))
                  (when (not (file-exists-p output-file-expanded))
                    (message "Warning: Recorded file '%s' not found after process exit" output-file-expanded)))))
-        (message "Recording to '%s'... Press M-x org-meeting-summarizer-stop-recording to stop." output-file-expanded)
-        (set-process-sentinel
-         process
-         (lambda (proc event)
-           (when (string-match-p "exited" event)
-             (message "Recording saved to '%s'" output-file-expanded)
-             (when (not (file-exists-p output-file-expanded))
-               (message "Warning: Recorded file '%s' not found after process exit" output-file-expanded)))))
-      process)))))
+            process)
+        ;; Manual stop recording with forward-counting timer
+        (let ((elapsed-seconds 0)
+              (manual-timer nil))
+          (setq manual-timer
+            (run-at-time
+             0 1
+             (lambda ()
+               (message "🔴 [%02d:%02d] Recording '%s' - Press M-x org-meeting-summarizer-stop-recording to stop"
+                        (/ elapsed-seconds 60)
+                        (mod elapsed-seconds 60)
+                        (file-name-nondirectory output-file-expanded))
+               (setq elapsed-seconds (1+ elapsed-seconds)))))
+          (set-process-sentinel
+           process
+           (lambda (proc event)
+             (when (string-match-p "exited" event)
+               (cancel-timer manual-timer)
+               (message "✅ Recording saved [Total: %02d:%02d] '%s'"
+                        (/ elapsed-seconds 60)
+                        (mod elapsed-seconds 60)
+                        (file-name-nondirectory output-file-expanded))
+               (when (not (file-exists-p output-file-expanded))
+                 (message "Warning: Recorded file '%s' not found after process exit" output-file-expanded))
+               ;; Auto-summarize if org-buffer is provided
+               (when org-buffer
+                 (message "Verifying recorded file: '%s'" output-file-expanded)
+                 (let ((retry-count 0)
+                       (max-retries 3))
+                   (while (and (not (file-exists-p output-file-expanded)) (< retry-count max-retries))
+                     (message "File '%s' not found, retrying (%d/%d)..." output-file-expanded (1+ retry-count) max-retries)
+                     (sleep-for 1)
+                     (setq retry-count (1+ retry-count)))
+                   (if (file-exists-p output-file-expanded)
+                       (progn
+                         (message "Summarizing recorded file '%s'..." output-file-expanded)
+                         (with-current-buffer org-buffer
+                           (org-meeting-summarizer-in-subtree output-file-expanded custom-prompt)))
+                     (message "Error: Recorded file '%s' does not exist after %d retries" output-file-expanded max-retries)))))))
+          process)))))
+
+;; User-facing recording function (with interactive form)
+(defun org-meeting-summarizer-record-audio-to-m4a (output-file duration)
+  "Record audio using ffmpeg and save to OUTPUT-FILE (.m4a, .mp3, etc.) for DURATION seconds.
+If DURATION is nil or 0, record until manually stopped with M-x org-meeting-summarizer-stop-recording.
+Supported formats: m4a, mp3, wav, ogg, flac"
+  (interactive "FFile to save recording (e.g., ~/Documents/0Inbox/recording.m4a): \nNDuration in seconds (0 for manual stop): ")
+  (org-meeting-summarizer--record-audio-internal (expand-file-name output-file) duration nil nil))
 
 (defun org-meeting-summarizer-stop-recording ()
   "Stop the audio recording process."
@@ -102,17 +152,23 @@ If DURATION is nil or 0, record until manually stopped with M-x org-meeting-summ
 (defun org-meeting-summarizer-record-and-summarize (output-file duration &optional custom-prompt)
   "Record audio to OUTPUT-FILE (.m4a) for DURATION seconds, then summarize in Org-mode subtree.
 If DURATION is 0, record until manually stopped and summarize automatically.
-Optionally provide CUSTOM-PROMPT."
-  (interactive "FFile to save recording (e.g., ~/Documents/0Inbox/recording.m4a): \nNDuration in seconds (0 for manual stop): \nsCustom Prompt (leave empty for default): ")
+If no date is mentioned in the recording, today's date will be used in the summary.
+Optionally provide CUSTOM-PROMPT (leave empty for default with today's date)."
+  (interactive 
+   (list (read-file-name "File to save recording: " nil nil nil "recording.m4a")
+         (read-number "Duration in seconds (0 for manual stop, default: 0): " 0)
+         (read-string "Custom Prompt (leave empty for default): ")))
   (unless org-meeting-summarizer-api-key
     (error "GEMINI_API_KEY is not set. See README.org for setup instructions"))
   (let* ((output-file-expanded (expand-file-name output-file))
-         (process (org-meeting-summarizer-record-audio-to-m4a output-file duration)))
+         (org-buffer (current-buffer)))
     (message "Starting recording to '%s'..." output-file-expanded)
     (if (and duration (> duration 0))
+        ;; Fixed duration: synchronous wait + auto-summarize
         (progn
+          (org-meeting-summarizer--record-audio-internal output-file-expanded duration nil custom-prompt)
           (message "Waiting for recording to complete...")
-          (sleep-for (+ duration 1))  ; Wait for recording to finish
+          (sleep-for (+ duration 1))
           (message "Verifying recorded file: '%s'" output-file-expanded)
           (let ((retry-count 0)
                 (max-retries 3))
@@ -123,28 +179,16 @@ Optionally provide CUSTOM-PROMPT."
             (if (file-exists-p output-file-expanded)
                 (progn
                   (message "Summarizing recorded file '%s'..." output-file-expanded)
-                  (org-meeting-summarizer-in-subtree output-file custom-prompt))
+                  (org-meeting-summarizer-in-subtree output-file-expanded custom-prompt))
               (error "Recorded file '%s' does not exist after %d retries" output-file-expanded max-retries))))
-      (message "Recording started. Stop with M-x org-meeting-summarizer-stop-recording to summarize '%s'" output-file-expanded)
-      (set-process-sentinel
-       process
-       (lambda (proc event)
-         (when (string-match-p "exited" event)
-           (message "Verifying recorded file: '%s'" output-file-expanded)
-           (let ((retry-count 0)
-                 (max-retries 3))
-             (while (and (not (file-exists-p output-file-expanded)) (< retry-count max-retries))
-               (message "File '%s' not found, retrying (%d/%d)..." output-file-expanded (1+ retry-count) max-retries)
-               (sleep-for 1)
-               (setq retry-count (1+ retry-count)))
-             (if (file-exists-p output-file-expanded)
-                 (progn
-                   (message "Summarizing recorded file '%s'..." output-file-expanded)
-                   (org-meeting-summarizer-in-subtree output-file-expanded custom-prompt))
-               (error "Recorded file '%s' does not exist after %d retries" output-file-expanded max-retries))))))))
+      ;; Manual stop: async with auto-summarize via process sentinel
+      (progn
+        (org-meeting-summarizer--record-audio-internal output-file-expanded duration org-buffer custom-prompt)
+        (message "🔴 Recording started (auto-summarizes when done) - Press M-x org-meeting-summarizer-stop-recording to stop")))))
 
 (defun org-meeting-summarizer (path &optional custom-prompt)
-  "Summarize m4a meeting files in PATH using Gemini API.
+  "Summarize audio meeting files (m4a, mp3, wav, ogg, flac) in PATH using Gemini API.
+If no date is found in the recording, today's date will be used as default.
 Optionally provide CUSTOM-PROMPT. Output goes to *Meeting Summaries* buffer."
   (interactive "fPath to file or folder: \nsCustom Prompt (leave empty for default): ")
   (unless org-meeting-summarizer-api-key
@@ -170,11 +214,12 @@ Optionally provide CUSTOM-PROMPT. Output goes to *Meeting Summaries* buffer."
            output-buffer)
           (goto-char (point-min))
           (switch-to-buffer output-buffer))
-      (error "Path '%s' does not exist." path-expanded)))))
+      (error "Path '%s' does not exist." path-expanded))))
 
 (defun org-meeting-summarizer-in-subtree (path &optional custom-prompt)
-  "Summarize m4a meeting files in PATH and insert summary into current Org-mode subtree.
-Optionally provide CUSTOM-PROMPT."
+  "Summarize audio meeting files (m4a, mp3, wav, ogg, flac) in PATH and insert summary into current Org-mode subtree.
+If no date is found in the recording, today's date will be used as default.
+Optionally provide CUSTOM-PROMPT (leave empty for default with today's date)."
   (interactive "fPath to file or folder: \nsCustom Prompt (leave empty for default): ")
   (unless (derived-mode-p 'org-mode)
     (error "This function must be called in an Org-mode buffer"))
@@ -238,8 +283,8 @@ Optionally provide CUSTOM-PROMPT."
                 (message "No valid summary generated for '%s'. Check *Temp Meeting Summaries* for details." path-expanded)
                 (display-buffer temp-buffer))))
           (unless (string-empty-p summary-text)
-            (kill-buffer temp-buffer)))
-      (error "Path '%s' does not exist." path-expanded)))))
+            (kill-buffer temp-buffer))))
+      (error "Path '%s' does not exist." path-expanded))))
 
 (when (featurep 'hydra)
   (defhydra org-meeting-summarizer-hydra (:color blue :hint nil)

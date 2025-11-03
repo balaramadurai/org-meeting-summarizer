@@ -1,6 +1,7 @@
 import os
 import argparse
 import time
+from datetime import datetime
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
 
@@ -27,15 +28,36 @@ def format_output(text):
     return '\n'.join(formatted_lines)
 
 def main():
-    parser = argparse.ArgumentParser(description="Summarize m4a meeting files using Gemini API.")
-    parser.add_argument("path", type=str, help="Path to a single m4a file or a folder containing m4a files.")
-    parser.add_argument("--prompt", type=str, default="summarize this meeting under date|title with attendees, notes and action items",
-                        help="Custom prompt for summarization.")
-    parser.add_argument("--api_key", type=str, required=True, help="Gemini API key.")
-    parser.add_argument("--model", type=str, default="gemini-1.5-flash",
-                        help="Gemini model to use (e.g., gemini-2.5-pro, gemini-2.5-flash).")
-    parser.add_argument("--retry_delay", type=int, default=47,
-                        help="Delay in seconds between retries after hitting rate limit.")
+    parser = argparse.ArgumentParser(
+        description="Summarize audio meeting files (m4a, mp3, etc.) using Gemini API or compatible AI service."
+    )
+    parser.add_argument("path", type=str, help="Path to a single audio file or a folder containing audio files.")
+    parser.add_argument(
+        "--prompt", 
+        type=str, 
+        default=None,
+        help="Custom prompt for summarization. If not provided, uses default with today's date."
+    )
+    parser.add_argument("--api_key", type=str, required=True, help="API key for the AI service.")
+    parser.add_argument(
+        "--model", 
+        type=str, 
+        default="gemini-2.5-flash",
+        help="AI model to use (default: gemini-2.5-flash). Examples: gemini-2.5-pro, gemini-2.5-flash, gemini-1.5-flash"
+    )
+    parser.add_argument(
+        "--retry_delay", 
+        type=int, 
+        default=47,
+        help="Delay in seconds between retries after hitting rate limit."
+    )
+    parser.add_argument(
+        "--api_provider",
+        type=str,
+        default="gemini",
+        choices=["gemini"],
+        help="AI API provider (default: gemini). Currently supports: gemini. Other providers can be added."
+    )
     args = parser.parse_args()
 
     input_path = os.path.expanduser(args.path)
@@ -43,36 +65,69 @@ def main():
         print(f"* Error: Path '{input_path}' does not exist.")
         return
 
-    genai.configure(api_key=args.api_key)
-    model = genai.GenerativeModel(args.model)
+    # Get today's date for default prompt
+    today_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Use custom prompt if provided, otherwise use default with today's date
+    if args.prompt:
+        prompt = args.prompt
+    else:
+        prompt = f"Today is {today_date}. Please summarize this meeting under the following headings: Date (use today's date if not mentioned), Title, Attendees, Notes, and Action Items."
+    
+    # Initialize API (currently Gemini, extensible for others)
+    if args.api_provider == "gemini":
+        genai.configure(api_key=args.api_key)
+        model = genai.GenerativeModel(args.model)
+    else:
+        print(f"* Error: API provider '{args.api_provider}' is not yet supported.")
+        return
 
-    m4a_files = []
+    # Supported audio formats (case-insensitive)
+    supported_formats = ('.m4a', '.mp3', '.wav', '.ogg', '.flac')
+    
+    audio_files = []
     if os.path.isfile(input_path):
-        if input_path.lower().endswith('.m4a'):
-            m4a_files = [os.path.basename(input_path)]
+        file_ext = os.path.splitext(input_path)[1].lower()
+        if file_ext in supported_formats:
+            audio_files = [os.path.basename(input_path)]
             input_dir = os.path.dirname(input_path) or '.'
         else:
-            print(f"* Error: '{input_path}' is not an m4a file.")
+            print(f"* Error: '{input_path}' is not a supported audio file. Supported formats: {', '.join(supported_formats)}")
             return
     elif os.path.isdir(input_path):
-        m4a_files = [f for f in os.listdir(input_path) if f.lower().endswith('.m4a')]
+        audio_files = [
+            f for f in os.listdir(input_path) 
+            if os.path.splitext(f)[1].lower() in supported_formats
+        ]
         input_dir = input_path
     else:
         print(f"* Error: '{input_path}' is neither a file nor a directory.")
         return
 
-    if not m4a_files:
-        print(f"* No m4a files found in '{input_path}'.")
+    if not audio_files:
+        print(f"* No audio files found in '{input_path}'. Supported formats: {', '.join(supported_formats)}")
         return
 
-    for file in m4a_files:
+    # Map file extensions to MIME types
+    mime_type_map = {
+        '.m4a': 'audio/mp4',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.flac': 'audio/flac'
+    }
+
+    for file in audio_files:
         full_path = os.path.join(input_dir, file)
+        file_ext = os.path.splitext(file)[1].lower()
+        mime_type = mime_type_map.get(file_ext, 'audio/mpeg')
+        
         retries = 3
         while retries > 0:
             try:
                 print(f"* Processing {file} *")
-                uploaded_file = genai.upload_file(full_path, mime_type='audio/mp4')
-                response = model.generate_content([args.prompt, uploaded_file])
+                uploaded_file = genai.upload_file(full_path, mime_type=mime_type)
+                response = model.generate_content([prompt, uploaded_file])
                 summary = response.text
                 formatted_summary = format_output(f"* Summary for {file}\n{summary}")
                 print(f"{formatted_summary}\n")

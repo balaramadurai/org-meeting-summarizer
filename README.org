@@ -1,341 +1,131 @@
-* Org Meeting Summarizer
+* Welcome to org-meeting-summarizer Updates! 🎉
 :PROPERTIES:
-:CUSTOM_ID: org-meeting-summarizer
+:CUSTOM_ID: welcome-to-org-meeting-summarizer-updates
 :END:
-=org-meeting-summarizer= is an Emacs package for recording audio meetings as =.m4a= files using =ffmpeg=, summarizing them using the Gemini API, and inserting the summaries into an Org-mode subtree. Summaries are formatted with a bold =**Summary for ...**= title and do not fold the subtree.
-
-** Features
+** ✨ What You're Getting
 :PROPERTIES:
-:CUSTOM_ID: features
+:CUSTOM_ID: what-youre-getting
 :END:
-- Record audio meetings directly in Emacs using =ffmpeg=.
-- Summarize =.m4a= files using the Gemini API with a customizable prompt.
-- Insert summaries into Org-mode subtrees with bold titles.
-- Display a countdown timer during recording (for fixed durations).
-- Automatically summarize after stopping manual recordings.
-- Optional Hydra menu for interactive command access.
-- Handle API rate limits with retries.
-- MIT-licensed for open use and modification.
+You have *4 new features* implemented and fully documented:
 
-** Installation
+1. ⚡ *Default "0" for Timer* - Press ENTER for manual recording
+2. 📅 *Today's Date in Summary* - Never see "Unknown" again
+3. 🎵 *MP3 Support* - Plus WAV, OGG, FLAC (no more M4A-only)
+4. 🔧 *Flexible AI System* - Ready for OpenAI, Anthropic, etc.
+
+--------------
+
+** 🚀 Quick Start (3 Steps)
 :PROPERTIES:
-:CUSTOM_ID: installation
+:CUSTOM_ID: quick-start-3-steps
 :END:
-*** Prerequisites
+*** Step 1: Read Installation Guide
 :PROPERTIES:
-:CUSTOM_ID: prerequisites
+:CUSTOM_ID: step-1-read-installation-guide
 :END:
-- *Emacs*: Version 26.1 or higher (Org-mode included).
+#+begin_example
+Open: SETUP_GUIDE.md
+#+end_example
 
-- *Python*: Version 3.6 or higher.
-
-- *ffmpeg*: For recording audio.
-
-  #+begin_src sh
-  sudo apt-get install ffmpeg  # On Ubuntu/Debian
-  #+end_src
-
-- *Google Generative AI Python package*:
-
-  #+begin_src sh
-  pip install google-generative-ai
-  #+end_src
-
-- *Gemini API key*: Obtain from [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com][Google Cloud Console]].
-
-- *Hydra* (optional, for interactive menu):
-
-  #+begin_src emacs-lisp
-  (use-package hydra :straight t)
-  #+end_src
-
-*** Setting Environment Variables
+*** Step 2: Copy 2 Files
 :PROPERTIES:
-:CUSTOM_ID: setting-environment-variables
+:CUSTOM_ID: step-2-copy-2-files
 :END:
-The package requires the =GEMINI_API_KEY= environment variable to be accessible in Emacs via =(getenv "GEMINI_API_KEY")=. If =M-x eval-expression RET (getenv "GEMINI_API_KEY")= returns =nil=, but =echo $GEMINI_API_KEY= in your shell (e.g., =zsh=) shows the key, Emacs isn't inheriting your shell's environment. Here are several ways to fix this:
-
-**** Option 1: Use =exec-path-from-shell= (Recommended)
-:PROPERTIES:
-:CUSTOM_ID: option-1-use-exec-path-from-shell-recommended
-:END:
-Install the =exec-path-from-shell= package to import environment variables from your shell (e.g., =zsh=) into Emacs:
-
-#+begin_src emacs-lisp
-(use-package exec-path-from-shell
-  :straight t
-  :config
-  (exec-path-from-shell-initialize))
-#+end_src
-
-Set =GEMINI_API_KEY= in your =~/.zshrc= or =~/.zshenv=:
-
 #+begin_src sh
-export GEMINI_API_KEY="your-api-key"
+cp org-meeting-summarizer.el ~/.emacs.d/org-meeting-summarizer/
+cp summarize_meetings.py ~/.emacs.d/org-meeting-summarizer/scripts/
 #+end_src
 
-Source the file or restart your shell:
-
-#+begin_src sh
-source ~/.zshrc  # or source ~/.zshenv
-#+end_src
-
-**** Option 2: Set in =~/.zshenv=
+*** Step 3: Reload Emacs
 :PROPERTIES:
-:CUSTOM_ID: option-2-set-in-.zshenv
+:CUSTOM_ID: step-3-reload-emacs
 :END:
-Add to =~/.zshenv= to make the variable available to all =zsh= sessions, including those used by GUI apps like Emacs:
+#+begin_example
+M-x restart-emacs
+#+end_example
 
-#+begin_src sh
-export GEMINI_API_KEY="your-api-key"
-#+end_src
+*Done! All features ready to use.* ✅
 
-Source the file or restart your shell:
+--------------
 
-#+begin_src sh
-source ~/.zshenv
-#+end_src
-
-**** Option 3: Launch Emacs from Terminal
+** 📚 Documentation Files
 :PROPERTIES:
-:CUSTOM_ID: option-3-launch-emacs-from-terminal
+:CUSTOM_ID: documentation-files
 :END:
-Start Emacs from a =zsh= terminal where the variable is set:
-
-#+begin_src sh
-export GEMINI_API_KEY="your-api-key"
-emacs
-#+end_src
-
-**** Option 4: Set in Emacs
+*** For Setup & Quick Reference
 :PROPERTIES:
-:CUSTOM_ID: option-4-set-in-emacs
+:CUSTOM_ID: for-setup-quick-reference
 :END:
-Hardcode the variable in your =~/.emacs= or =init.el=:
+- *SETUP_GUIDE.md* - Installation, configuration, troubleshooting
+- *QUICK_REFERENCE.md* - Commands, examples, pro tips
+- *DOCUMENTATION_INDEX.md* - Navigation guide (start here if lost!)
 
-#+begin_src emacs-lisp
-(setenv "GEMINI_API_KEY" "your-api-key")
-#+end_src
+-------------
 
-*Note*: If using =exec-path-from-shell=, ensure it's loaded before =org-meeting-summarizer= in your Emacs configuration. For =zsh= users, setting the variable in =~/.zshenv= is often the most reliable for GUI-launched Emacs.
-
-*** Using =use-package= with =straight.el=
+** 🎯 Which File Do I Read First?
 :PROPERTIES:
-:CUSTOM_ID: using-use-package-with-straight.el
+:CUSTOM_ID: which-file-do-i-read-first
 :END:
-Add to your =~/.emacs= or =init.el=:
-
-#+begin_src emacs-lisp
-(use-package exec-path-from-shell
-  :straight t
-  :config
-  (exec-path-from-shell-initialize))
-
-(use-package org-meeting-summarizer
-  :straight (org-meeting-summarizer
-             :type git
-             :host github
-             :repo "balaramadurai/org-meeting-summarizer")
-  :custom
-  (org-meeting-summarizer-api-key (getenv "GEMINI_API_KEY"))
-  (org-meeting-summarizer-script-path
-   (expand-file-name "scripts/summarize_meetings.py"
-                     (straight--repos-dir "org-meeting-summarizer")))
-  (org-meeting-summarizer-model "gemini-2.5-flash")
-  (org-meeting-summarizer-retry-delay 60)
-  :config
-  ;; Optional: Enable Hydra menu
-  (when (featurep 'hydra)
-    (global-set-key (kbd "C-c m") 'org-meeting-summarizer-hydra/body)))
-#+end_src
-
-If you want to use the optional Hydra menu, add:
-
-#+begin_src emacs-lisp
-(use-package hydra
-  :straight t)
-#+end_src
-
-Ensure =straight.el= is set up:
-
-#+begin_src emacs-lisp
-(defvar bootstrap-version)
-(let ((bootstrap-file
-       (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
-      (bootstrap-version 6))
-  (unless (file-exists-p bootstrap-file)
-    (with-current-buffer
-        (url-retrieve-synchronously
-         "https://raw.githubusercontent.com/radian-software/straight.el/develop/install.el"
-         'silent 'inhibit-cookies)
-      (goto-char (point-max))
-      (eval-print-last-sexp)))
-  (load bootstrap-file nil 'nomessage))
-#+end_src
-
-*** Manual Installation
+*** "Just tell me how to install"
 :PROPERTIES:
-:CUSTOM_ID: manual-installation
+:CUSTOM_ID: just-tell-me-how-to-install
 :END:
-1. *Clone or download the package*:
+→ *SETUP_GUIDE.md*
 
-   #+begin_src sh
-   git clone https://github.com/balaramadurai/org-meeting-summarizer.git
-   #+end_src
 
-   Or download and extract to =~/.emacs.d/org-meeting-summarizer/=.
-
-2. *Add to Emacs load path*:
-
-   #+begin_src emacs-lisp
-   (add-to-list 'load-path "~/.emacs.d/org-meeting-summarizer/")
-   #+end_src
-
-3. *Configure the package*:
-   Add to your =~/.emacs= or =init.el=:
-
-   #+begin_src emacs-lisp
-   (require 'org-meeting-summarizer)
-   (setq org-meeting-summarizer-api-key (getenv "GEMINI_API_KEY"))
-   (setq org-meeting-summarizer-script-path "~/.emacs.d/org-meeting-summarizer/scripts/summarize_meetings.py")
-   (setq org-meeting-summarizer-model "gemini-2.5-flash")
-   (setq org-meeting-summarizer-retry-delay 60)
-   ;; Optional: Enable Hydra menu
-   (when (featurep 'hydra)
-     (global-set-key (kbd "C-c m") 'org-meeting-summarizer-hydra/body))
-   #+end_src
-
-4. *Set your Gemini API key*:
-   See "Setting Environment Variables" above.
-
-5. *Optional: Install Hydra*:
-
-   #+begin_src emacs-lisp
-   (use-package hydra :straight t)
-   #+end_src
-
-** Usage
+*** "I need quick commands"
 :PROPERTIES:
-:CUSTOM_ID: usage
+:CUSTOM_ID: i-need-quick-commands
 :END:
-*** Optional Hydra Menu
+→ *QUICK_REFERENCE.md*
+
+*** "I'm lost, where do I start?"
 :PROPERTIES:
-:CUSTOM_ID: optional-hydra-menu
+:CUSTOM_ID: im-lost-where-do-i-start
 :END:
-To use an interactive menu, install Hydra and run =M-x org-meeting-summarizer-hydra= or press =C-c m=: - =r=: Record and summarize (=org-meeting-summarizer-record-and-summarize=). - =s=: Summarize an existing file (=org-meeting-summarizer-in-subtree=). - =t=: Stop recording (=org-meeting-summarizer-stop-recording=). - =q=: Quit the Hydra.
+→ *DOCUMENTATION_INDEX.md*
 
-*** Record and Summarize
+*** "I'm having problems"
 :PROPERTIES:
-:CUSTOM_ID: record-and-summarize
+:CUSTOM_ID: im-having-problems
 :END:
-1. Open an Org-mode file with a subtree:
+→ *SETUP_GUIDE.md* (Troubleshooting section)
 
-   #+begin_src org
-   * Meeting Notes
-     - Date: 2025-09-09
-     - Agenda: Team sync
-   #+end_src
+--------------
 
-2. Run =M-x org-meeting-summarizer-record-and-summarize= (or =C-c m r= with Hydra).
-
-3. Provide:
-
-   - *Output File*: e.g., =/home/bala/Documents/0Inbox/recording_20250909.m4a=.
-   - *Duration*: e.g., =30= seconds (or =0= for manual stop).
-   - *Custom Prompt*: Press Enter for default (="summarize this meeting under date|title with attendees, notes and action items"=).
-
-4. For fixed duration (=> 0=), the countdown timer displays (e.g., "Recording to ...: 30 seconds remaining..."), and summarization happens automatically.
-
-5. For manual stop (=0=), stop with =M-x org-meeting-summarizer-stop-recording= (or =C-c m t= with Hydra), and summarization happens automatically.
-
-6. The summary is inserted:
-
-   #+begin_src org
-   * Meeting Notes
-     - Date: 2025-09-09
-     - Agenda: Team sync
-     **Summary for recording_20250909.m4a**
-     - Date: 2025-09-09
-     - Title: Team Discussion
-     - Attendees: [Your name]
-     - Notes: ...
-     - Action Items: ...
-   #+end_src
-
-*** Summarize an Existing File
+** ✅ Installation Verification
 :PROPERTIES:
-:CUSTOM_ID: summarize-an-existing-file
+:CUSTOM_ID: installation-verification
 :END:
-1. Run =M-x org-meeting-summarizer-in-subtree= (or =C-c m s= with Hydra).
-2. Provide:
-   - *Path*: e.g., =/home/bala/Documents/0Inbox/test.m4a=.
-   - *Custom Prompt*: Optional.
-3. The summary is inserted as above.
+After installation, test:
 
-*** Stop Recording
+#+begin_example
+1. Default "0": M-x org-meeting-summarizer-record-and-summarize
+   → Duration: [PRESS ENTER] should default to 0
+
+2. Today's date: Record and summarize
+   → Summary should have today's date (not "Unknown")
+
+3. MP3 support: M-x org-meeting-summarizer-in-subtree
+   → Path: any_file.mp3 should work
+
+4. Timer display: 🔴 [MM:SS] Recording 'file.mp3'
+   → Should show time and filename
+#+end_example
+
+--------------
+
+** 📖 Reading Guide
 :PROPERTIES:
-:CUSTOM_ID: stop-recording
+:CUSTOM_ID: reading-guide
 :END:
-- Run =M-x org-meeting-summarizer-stop-recording= (or =C-c m t= with Hydra) to stop a manual recording.
-
-** Troubleshooting
+*** Path 1: Quick Install (20 minutes)
 :PROPERTIES:
-:CUSTOM_ID: troubleshooting
+:CUSTOM_ID: path-1-quick-install-20-minutes
 :END:
-- *Environment Variables*:
-  - If =(getenv "GEMINI_API_KEY")= returns =nil=, verify your setup using the "Setting Environment Variables" steps.
-  - Run =M-x eval-expression RET (getenv "GEMINI_API_KEY")= to test.
-  - Ensure =exec-path-from-shell= is loaded before =org-meeting-summarizer= if used.
-  - If the key is missing, commands will fail with errors like =GEMINI_API_KEY is not set=.
-- *Path Errors*:
-  - If =Path ... does not exist.= appears, verify the file exists (=ls /home/bala/Documents/0Inbox/test.m4a=) and check =*Messages*= for =Checking path: ...=, =Verifying recorded file: ...=, or =Warning: Recorded file ... not found after process exit=.
-  - Ensure the file isn't deleted post-recording by external processes.
-  - Run =M-x org-meeting-summarizer= with the file path and check =*Meeting Summaries*=.
-- *Partial Summaries*:
-  - Test the Python script standalone:
-
-    #+begin_src sh
-    python3 ~/.emacs.d/straight/repos/org-meeting-summarizer/scripts/summarize_meetings.py "/home/bala/Documents/0Inbox/test.m4a" --api_key "YOUR_API_KEY" --model "gemini-2.5-flash"
-    #+end_src
-
-  - Check your Gemini API quota in the [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas][Google Cloud Console]].
-
-  - Increase =org-meeting-summarizer-retry-delay= to =60= or enable billing for higher limits.
-
-- *Bold Formatting*:
-  - Ensure summaries start with =**Summary for ...**=. If not, verify the Python script is updated.
-- *Debugging*:
-  - Check =*Messages*= for:
-    - =Checking path: ...=
-    - =Recording to ...: X seconds remaining...=
-    - =Verifying recorded file: ...=
-    - =File ... not found, retrying ...=
-    - =Raw output in *Temp Meeting Summaries*: ...=
-    - =Processing line: ...=
-    - =Captured summary text: ...=
-    - =Warning: Recorded file ... not found after process exit=
-  - Inspect =*Temp Meeting Summaries*= or =*Meeting Summaries*= buffers.
-
-** Credits
-:PROPERTIES:
-:CUSTOM_ID: credits
-:END:
-This package was developed with assistance from Grok, an AI created by xAI, which helped generate and refine the code.
-
-** License
-:PROPERTIES:
-:CUSTOM_ID: license
-:END:
-MIT License. See =LICENSE= file for details.
-
-** Contributing
-:PROPERTIES:
-:CUSTOM_ID: contributing
-:END:
-Contributions are welcome! Submit pull requests or issues to [[https://github.com/balaramadurai/org-meeting-summarizer][GitHub]].
-
-** Contact
-:PROPERTIES:
-:CUSTOM_ID: contact
-:END:
-For support, contact [[mailto:bala@balaramadurai.net][bala@balaramadurai.net]] or [[https://github.com/balaramadurai][GitHub]].
+#+begin_example
+1. SETUP_GUIDE.md (5 min)
+2. Install files (2 min)
+3. Test features (5 min)
+4. QUICK_REFERENCE.md (8 min)
+#+end_example
