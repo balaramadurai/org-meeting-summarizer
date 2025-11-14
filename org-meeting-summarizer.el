@@ -14,7 +14,12 @@
 ;; This package records audio meetings using ffmpeg, summarizes them using the
 ;; Gemini API, and inserts summaries into Org-mode subtrees. Summaries have bold
 ;; titles (e.g., **Summary for ...**) and do not fold the subtree.
-;; The code was generated with assistance from Grok, an AI created by xAI.
+;; 
+;; The code was initially generated with assistance from Grok, an AI created by xAI,
+;; and further developed and enhanced by Claude, an AI assistant created by Anthropic.
+;; Recent improvements include: default timer values, today's date auto-inclusion in
+;; summaries, multi-format audio support (MP3, WAV, OGG, FLAC), flexible AI provider
+;; system, improved timer display, temp file auto-generation, and comprehensive documentation.
 
 ;;; Code:
 
@@ -29,7 +34,7 @@
   :group 'org-meeting-summarizer)
 
 (defcustom org-meeting-summarizer-api-key ""
-  "Gemini API key for summarizing m4a files."
+  "Gemini API key for summarizing audio files."
   :type 'string
   :group 'org-meeting-summarizer)
 
@@ -43,6 +48,28 @@
   :type 'integer
   :group 'org-meeting-summarizer)
 
+(defcustom org-meeting-summarizer-temp-dir
+  (expand-file-name "org-meeting-summarizer" (or (getenv "XDG_CACHE_HOME") "~/.cache"))
+  "Directory for temporary recordings. Auto-generated files are stored here."
+  :type 'string
+  :group 'org-meeting-summarizer)
+
+(defcustom org-meeting-summarizer-keep-temp-files nil
+  "If non-nil, keep temporary recording files after summarization. Otherwise, delete them."
+  :type 'boolean
+  :group 'org-meeting-summarizer)
+
+(defun org-meeting-summarizer--ensure-temp-dir ()
+  "Ensure the temp directory exists."
+  (let ((temp-dir (expand-file-name org-meeting-summarizer-temp-dir)))
+    (unless (file-directory-p temp-dir)
+      (make-directory temp-dir t))
+    temp-dir))
+
+(defun org-meeting-summarizer--generate-temp-filename (format-ext)
+  "Generate a temp filename with timestamp and FORMAT-EXT (e.g., 'm4a', 'mp3')."
+  (format-time-string (format "recording-%%Y%%m%%d-%%H%%M%%S.%s" format-ext)))
+
 ;; Internal function: record audio (called programmatically, no interactive form)
 (defun org-meeting-summarizer--record-audio-internal (output-file-expanded duration org-buffer custom-prompt)
   "Internal function to record audio and handle process sentinel.
@@ -51,8 +78,8 @@ DURATION: recording duration in seconds (0 for manual stop)
 ORG-BUFFER: buffer to auto-summarize into
 CUSTOM-PROMPT: optional custom prompt for summarization"
   (let* ((command (if (and duration (> duration 0))
-                      (format "ffmpeg -f alsa -i default -t %d -c:a aac %s" duration output-file-expanded)
-                    (format "ffmpeg -f alsa -i default -c:a aac %s" output-file-expanded)))
+                      (format "ffmpeg -f pulse -i default -t %d -c:a aac '%s' 2>/dev/null" duration output-file-expanded)
+                    (format "ffmpeg -f pulse -i default -c:a aac '%s' 2>/dev/null" output-file-expanded)))
          (process-name "audio-recording")
          (remaining duration))
     (message "Checking output path: '%s'" output-file-expanded)
@@ -146,44 +173,49 @@ Supported formats: m4a, mp3, wav, ogg, flac"
     (if process
         (progn
           (interrupt-process process)
+          ;; Give ffmpeg time to finalize the file
+          (sleep-for 0.5)
           (message "Recording stopped"))
       (message "No recording process found"))))
 
-(defun org-meeting-summarizer-record-and-summarize (output-file duration &optional custom-prompt)
-  "Record audio to OUTPUT-FILE (.m4a) for DURATION seconds, then summarize in Org-mode subtree.
+(defun org-meeting-summarizer-record-and-summarize (duration &optional custom-prompt)
+  "Record audio for DURATION seconds, then summarize in Org-mode subtree.
+Recording is saved to temp dir (`org-meeting-summarizer-temp-dir') with auto-generated filename.
 If DURATION is 0, record until manually stopped and summarize automatically.
 If no date is mentioned in the recording, today's date will be used in the summary.
-Optionally provide CUSTOM-PROMPT (leave empty for default with today's date)."
+Optionally provide CUSTOM-PROMPT (leave empty for default with today's date).
+Temp files are auto-deleted after summarization unless `org-meeting-summarizer-keep-temp-files' is non-nil."
   (interactive 
-   (list (read-file-name "File to save recording: " nil nil nil "recording.m4a")
-         (read-number "Duration in seconds (0 for manual stop, default: 0): " 0)
+   (list (read-number "Duration in seconds (0 for manual stop, default: 0): " 0)
          (read-string "Custom Prompt (leave empty for default): ")))
   (unless org-meeting-summarizer-api-key
     (error "GEMINI_API_KEY is not set. See README.org for setup instructions"))
-  (let* ((output-file-expanded (expand-file-name output-file))
+  (let* ((temp-dir (org-meeting-summarizer--ensure-temp-dir))
+         (temp-filename (org-meeting-summarizer--generate-temp-filename "m4a"))
+         (output-file (expand-file-name temp-filename temp-dir))
          (org-buffer (current-buffer)))
-    (message "Starting recording to '%s'..." output-file-expanded)
+    (message "Starting recording to '%s'..." output-file)
     (if (and duration (> duration 0))
         ;; Fixed duration: synchronous wait + auto-summarize
         (progn
-          (org-meeting-summarizer--record-audio-internal output-file-expanded duration nil custom-prompt)
+          (org-meeting-summarizer--record-audio-internal output-file duration nil custom-prompt)
           (message "Waiting for recording to complete...")
           (sleep-for (+ duration 1))
-          (message "Verifying recorded file: '%s'" output-file-expanded)
+          (message "Verifying recorded file: '%s'" output-file)
           (let ((retry-count 0)
                 (max-retries 3))
-            (while (and (not (file-exists-p output-file-expanded)) (< retry-count max-retries))
-              (message "File '%s' not found, retrying (%d/%d)..." output-file-expanded (1+ retry-count) max-retries)
+            (while (and (not (file-exists-p output-file)) (< retry-count max-retries))
+              (message "File '%s' not found, retrying (%d/%d)..." output-file (1+ retry-count) max-retries)
               (sleep-for 1)
               (setq retry-count (1+ retry-count)))
-            (if (file-exists-p output-file-expanded)
+            (if (file-exists-p output-file)
                 (progn
-                  (message "Summarizing recorded file '%s'..." output-file-expanded)
-                  (org-meeting-summarizer-in-subtree output-file-expanded custom-prompt))
-              (error "Recorded file '%s' does not exist after %d retries" output-file-expanded max-retries))))
+                  (message "Summarizing recorded file '%s'..." output-file)
+                  (org-meeting-summarizer-in-subtree output-file custom-prompt))
+              (error "Recorded file '%s' does not exist after %d retries" output-file max-retries))))
       ;; Manual stop: async with auto-summarize via process sentinel
       (progn
-        (org-meeting-summarizer--record-audio-internal output-file-expanded duration org-buffer custom-prompt)
+        (org-meeting-summarizer--record-audio-internal output-file duration org-buffer custom-prompt)
         (message "🔴 Recording started (auto-summarizes when done) - Press M-x org-meeting-summarizer-stop-recording to stop")))))
 
 (defun org-meeting-summarizer (path &optional custom-prompt)
@@ -219,7 +251,9 @@ Optionally provide CUSTOM-PROMPT. Output goes to *Meeting Summaries* buffer."
 (defun org-meeting-summarizer-in-subtree (path &optional custom-prompt)
   "Summarize audio meeting files (m4a, mp3, wav, ogg, flac) in PATH and insert summary into current Org-mode subtree.
 If no date is found in the recording, today's date will be used as default.
-Optionally provide CUSTOM-PROMPT (leave empty for default with today's date)."
+Optionally provide CUSTOM-PROMPT (leave empty for default with today's date).
+If PATH is in `org-meeting-summarizer-temp-dir' and `org-meeting-summarizer-keep-temp-files'
+is nil, the temp file is deleted after successful summarization."
   (interactive "fPath to file or folder: \nsCustom Prompt (leave empty for default): ")
   (unless (derived-mode-p 'org-mode)
     (error "This function must be called in an Org-mode buffer"))
@@ -229,6 +263,8 @@ Optionally provide CUSTOM-PROMPT (leave empty for default with today's date)."
     (error "GEMINI_API_KEY is not set. See README.org for setup instructions"))
   (let* ((org-buffer (current-buffer))
          (path-expanded (expand-file-name path))
+         (temp-dir (expand-file-name org-meeting-summarizer-temp-dir))
+         (is-temp-file (string-prefix-p temp-dir path-expanded))
          (prompt-arg (if (and custom-prompt (not (string-empty-p custom-prompt)))
                          (format "--prompt \"%s\"" custom-prompt)
                        ""))
@@ -278,7 +314,13 @@ Optionally provide CUSTOM-PROMPT (leave empty for default with today's date)."
             (if (and summary-text (not (string-empty-p summary-text)))
                 (progn
                   (insert summary-text)
-                  (message "Summary inserted successfully for '%s'" path-expanded))
+                  (message "Summary inserted successfully for '%s'" path-expanded)
+                  ;; Delete temp file if applicable
+                  (when (and is-temp-file
+                             (not org-meeting-summarizer-keep-temp-files)
+                             (file-exists-p path-expanded))
+                    (delete-file path-expanded)
+                    (message "✅ Deleted temp file: '%s'" path-expanded)))
               (progn
                 (message "No valid summary generated for '%s'. Check *Temp Meeting Summaries* for details." path-expanded)
                 (display-buffer temp-buffer))))
@@ -291,7 +333,7 @@ Optionally provide CUSTOM-PROMPT (leave empty for default with today's date)."
     "
 Org Meeting Summarizer
 ----------------------
-_r_: Record and summarize
+_r_: Record and summarize (auto-temp)
 _s_: Summarize existing file
 _t_: Stop recording
 _q_: Quit
