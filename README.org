@@ -1,8 +1,8 @@
 * Org Meeting Summarizer
 
-Record audio meetings directly in Emacs, summarize them using Google's Gemini API, and insert summaries into Org-mode subtrees—all without leaving your editor.
+Record audio meetings directly in Emacs, summarize them using AI, and insert summaries into Org-mode subtrees—all without leaving your editor.
 
-*Note: Currently supports Gemini API. Support for Claude, OpenAI, and Ollama is planned. Contributions welcome!*
+*Supports Google Gemini API and Ollama (local or cloud) with Whisper transcription.*
 
 ** Quick Start
 
@@ -11,8 +11,8 @@ Record audio meetings directly in Emacs, summarize them using Google's Gemini AP
 - *Emacs* 26.1+ (with Org-mode)
 - *Python* 3.6+
 - *ffmpeg* for audio recording
-- *Google Generative AI package*: =pip install google-generative-ai=
-- *Gemini API key* from [[https://console.cloud.google.com][Google Cloud Console]]
+- *For Gemini*: =pip install google-generativeai= and API key from [[https://aistudio.google.com/app/apikey][Google AI Studio]]
+- *For Ollama*: =pip install openai-whisper requests= and [[https://ollama.com][Ollama]] installed
 
 *** Five-Minute Setup
 
@@ -22,47 +22,64 @@ Record audio meetings directly in Emacs, summarize them using Google's Gemini AP
    brew install ffmpeg          # macOS
    #+end_src
 
-2. *Get your Gemini API key*: [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com][Google Cloud Console]]
+2. *Install Python dependencies*:
+   #+begin_src sh
+   # For Gemini:
+   pip install google-generativeai
 
-3. *Set the environment variable*:
-   #+begin_src sh
-   export GEMINI_API_KEY="your-api-key"
-   #+end_src
-   For persistent setup, add to =~/.zshenv= (or =~/.bashrc=):
-   #+begin_src sh
-   export GEMINI_API_KEY="your-api-key"
+   # For Ollama (with Whisper transcription):
+   pip install openai-whisper requests
    #+end_src
 
-4. *Install the package* using =straight.el=:
+3. *Install the package* using =straight.el=:
+
+   *For Gemini:*
    #+begin_src emacs-lisp
-   (use-package exec-path-from-shell
-     :straight t
-     :config
-     (exec-path-from-shell-initialize))
-
    (use-package org-meeting-summarizer
      :straight (org-meeting-summarizer
                 :type git
                 :host github
                 :repo "balaramadurai/org-meeting-summarizer")
-     :custom
-     (org-meeting-summarizer-api-key (getenv "GEMINI_API_KEY"))
-     (org-meeting-summarizer-model "gemini-2.5-flash"))
+     :config
+     (setq org-meeting-summarizer-api-provider "gemini")
+     (setq org-meeting-summarizer-api-key "your-gemini-api-key")
+     (setq org-meeting-summarizer-model "gemini-2.5-flash"))
    #+end_src
 
-   Or manually:
+   *For Ollama (local):*
    #+begin_src emacs-lisp
-   (add-to-list 'load-path "~/.emacs.d/org-meeting-summarizer/")
-   (require 'org-meeting-summarizer)
-   (setq org-meeting-summarizer-api-key (getenv "GEMINI_API_KEY"))
-   (setq org-meeting-summarizer-script-path "~/.emacs.d/org-meeting-summarizer/scripts/summarize_meetings.py")
+   (use-package org-meeting-summarizer
+     :straight (org-meeting-summarizer
+                :type git
+                :host github
+                :repo "balaramadurai/org-meeting-summarizer")
+     :config
+     (setq org-meeting-summarizer-api-provider "ollama")
+     (setq org-meeting-summarizer-model "llama3")  ; or mistral, etc.
+     (setq org-meeting-summarizer-ollama-api-base "http://localhost:11434")
+     (setq org-meeting-summarizer-whisper-model "base"))  ; tiny, base, small, medium, large
    #+end_src
 
-5. *Verify setup*:
+   *For Ollama Cloud:*
    #+begin_src emacs-lisp
-   M-x eval-expression RET (getenv "GEMINI_API_KEY") RET
+   (use-package org-meeting-summarizer
+     :straight (org-meeting-summarizer
+                :type git
+                :host github
+                :repo "balaramadurai/org-meeting-summarizer")
+     :config
+     (setq org-meeting-summarizer-api-provider "ollama")
+     (setq org-meeting-summarizer-model "mistral-large-3:675b-cloud")
+     (setq org-meeting-summarizer-ollama-api-base "http://localhost:11434")  ; your cloud URL
+     (setq org-meeting-summarizer-api-key "your-ollama-cloud-key")  ; if required
+     (setq org-meeting-summarizer-whisper-model "base"))
    #+end_src
-   Should return your key, not =nil=.
+
+4. *Verify setup*:
+   #+begin_src emacs-lisp
+   M-x eval-expression RET org-meeting-summarizer-api-provider RET
+   #+end_src
+   Should return ="gemini"= or ="ollama"=.
 
 ** Usage
 
@@ -119,8 +136,9 @@ For faster access to commands, enable Hydra:
 #+end_src
 
 Then press =C-c m= for:
-- =r=: Record and summarize
-- =s=: Summarize existing file
+- =r=: Record and summarize at point
+- =s=: Summarize file into subtree
+- =p=: Summarize file at point
 - =t=: Stop recording
 - =q=: Quit
 
@@ -129,28 +147,64 @@ Then press =C-c m= for:
 All settings can be customized via =M-x customize-group RET org-meeting-summarizer=, or in your config:
 
 #+begin_src emacs-lisp
-(setq org-meeting-summarizer-api-key "your-key")          ; Gemini API key
-(setq org-meeting-summarizer-model "gemini-2.5-flash")    ; Model to use
-(setq org-meeting-summarizer-retry-delay 60)              ; Seconds between retries on rate limit
-(setq org-meeting-summarizer-script-path "/path/to/summarize_meetings.py")
+;; API Provider: "gemini" or "ollama"
+(setq org-meeting-summarizer-api-provider "gemini")
+
+;; API Key (required for Gemini, optional for local Ollama)
+(setq org-meeting-summarizer-api-key "your-key")
+
+;; Model name
+(setq org-meeting-summarizer-model "gemini-2.5-flash")  ; or "llama3", "mistral", etc.
+
+;; Ollama-specific settings
+(setq org-meeting-summarizer-ollama-api-base "http://localhost:11434")
+
+;; Whisper model for transcription (used with Ollama)
+;; Options: tiny, base, small, medium, large, large-v2, large-v3
+(setq org-meeting-summarizer-whisper-model "base")
+
+;; Retry delay on rate limit (seconds)
+(setq org-meeting-summarizer-retry-delay 60)
+
+;; Keep temp files after summarization
+(setq org-meeting-summarizer-keep-temp-files nil)
 #+end_src
+
+*** Whisper Model Selection (for Ollama)
+
+When using Ollama, audio is first transcribed using Whisper. Choose based on your needs:
+
+| Model | Speed | Accuracy | Memory |
+|-------+-------+----------+--------|
+| tiny | Fastest | Basic | ~1GB |
+| base | Fast | Good | ~1GB |
+| small | Medium | Better | ~2GB |
+| medium | Slow | High | ~5GB |
+| large | Slowest | Best | ~10GB |
+
+For CPU-only systems, =tiny= or =base= is recommended.
 
 ** Troubleshooting
 
 | Problem | Solution |
 |---------+----------|
-| =GEMINI_API_KEY is not set= | Verify =M-x eval-expression RET (getenv "GEMINI_API_KEY")= returns your key. If =nil=, add to =~/.zshenv= and restart Emacs, or use =exec-path-from-shell=. |
+| =API key is required= | Set =org-meeting-summarizer-api-key= for Gemini. For local Ollama, API key is optional. |
 | File not found after recording | Check =*Messages*= buffer. Ensure ffmpeg is installed (=ffmpeg -version=) and output directory is writable. |
-| Partial or empty summaries | Test Python script directly: =python3 /path/to/summarize_meetings.py "/path/to/file.m4a" --api_key "KEY" --model "gemini-2.5-flash"=. Check [[https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas][Google Cloud quotas]]. Enable billing if needed. |
+| Partial or empty summaries | Test Python script directly (see below). Check API quotas. |
 | Rate limit errors | Increase =org-meeting-summarizer-retry-delay= to 60+ seconds. Retries are automatic. |
 | =Path does not exist= | Verify the file exists: =ls /path/to/file.m4a=. Check for typos in the path. |
 | Hydra menu not showing | Install Hydra: =M-x package-install RET hydra=, or via =straight.el=. |
+| Whisper not found | Install with =pip install openai-whisper=. |
+| Ollama connection error | Ensure Ollama is running: =ollama serve=. Check API base URL uses =http://= not =https://= for local. |
 
 ** Features
 
 - Record audio directly in Emacs with ffmpeg
-- Summarize =.m4a= files using Gemini API
-- Insert summaries into Org-mode subtrees with bold **Summary for ...** titles
+- Multiple AI providers: Gemini API and Ollama (local or cloud)
+- Whisper integration for audio transcription (with Ollama)
+- Insert summaries at cursor position or end of subtree
+- Support for multiple audio formats: m4a, mp3, wav, ogg, flac
+- Automatic Markdown to Org-mode conversion
 - Countdown timer during fixed-duration recordings
 - Automatic summarization after manual stop
 - Custom summarization prompts
@@ -185,10 +239,22 @@ Results appear in =*Meeting Summaries*= buffer.
 
 Use the Python script independently:
 
+*With Gemini:*
 #+begin_src sh
 python3 scripts/summarize_meetings.py "/path/to/meeting.m4a" \
+  --api_provider "gemini" \
   --api_key "YOUR_KEY" \
   --model "gemini-2.5-flash" \
+  --prompt "Summarize this: attendees, decisions, next steps"
+#+end_src
+
+*With Ollama:*
+#+begin_src sh
+python3 scripts/summarize_meetings.py "/path/to/meeting.m4a" \
+  --api_provider "ollama" \
+  --model "llama3" \
+  --api_base "http://localhost:11434" \
+  --whisper_model "base" \
   --prompt "Summarize this: attendees, decisions, next steps"
 #+end_src
 
@@ -267,28 +333,47 @@ python3 ~/.emacs.d/straight/repos/org-meeting-summarizer/scripts/summarize_meeti
 
 ** API Provider Support
 
-Currently, =org-meeting-summarizer= uses **Google's Gemini API**, which offers:
+*** Gemini (Default)
+
+Google's Gemini API offers:
+- Direct audio file processing (no transcription step needed)
 - Strong audio understanding
-- Multimodal file handling (direct .m4a support)
 - Generous free tier for testing
-- No need for separate transcription step
 
-*** Future: Multi-Provider Support
+*** Ollama (Local or Cloud)
 
-The architecture is designed to support multiple providers. Planned extensions:
+Ollama support uses a two-step process:
+1. *Whisper* transcribes audio to text
+2. *Ollama* summarizes the transcript
+
+Benefits:
+- Privacy: Run entirely locally
+- Cost: No API costs for local models
+- Flexibility: Use any Ollama model (llama3, mistral, etc.)
+- Cloud option: Use Ollama cloud for larger models
+
+Note: Whisper runs on CPU by default. For faster transcription, use =tiny= or =base= models.
+
+*** Provider Comparison
+
+| Provider | Audio Support | Transcription | Privacy | Cost |
+|----------+---------------+---------------+---------+------|
+| Gemini | Direct | Built-in | Cloud | Free tier |
+| Ollama Local | Via Whisper | Local Whisper | Full | Free |
+| Ollama Cloud | Via Whisper | Local Whisper | Partial | Varies |
+
+*** Future Providers
 
 | Provider | Status | Notes |
 |----------+--------+-------|
-| Gemini | ✓ Supported | Current default |
-| Claude | Planned | Anthropic API supports audio via Files API |
-| OpenAI | Planned | Would use Whisper + GPT-4o or GPT-4 Audio |
-| Ollama | Planned | Local-first option; requires Whisper for audio transcription |
+| Claude | Planned | Anthropic API |
+| OpenAI | Planned | GPT-4o with audio |
 
 To help implement support for other providers, see [[https://github.com/balaramadurai/org-meeting-summarizer/issues][GitHub Issues]].
 
 ** License & Credits
 
-MIT Licensed. Developed with assistance from Grok (xAI).
+MIT Licensed. Developed with assistance from Grok (xAI) and Claude (Anthropic).
 
 For issues, contributions, or questions:
 - GitHub: [[https://github.com/balaramadurai/org-meeting-summarizer][balaramadurai/org-meeting-summarizer]]
