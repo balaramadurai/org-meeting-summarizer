@@ -339,23 +339,19 @@ is nil, the temp file is deleted after successful summarization."
             (goto-char (point-min))
             (message "Raw output in *Temp Meeting Summaries*: %s"
                      (buffer-substring (point-min) (min 500 (point-max))))
-            (let ((in-summary nil))
-              (while (not (eobp))
-                (let ((line (buffer-substring (line-beginning-position) (line-end-position))))
-                  (message "Processing line: %s" line)
-                  (cond
-                   ((string-match-p "^\\*\\*Summary for" line)
-                    (setq in-summary t)
-                    (setq summary-text (concat summary-text line "\n")))
-                   ((string-match-p "^\\* +\\(Processing\\|Error\\|Rate limit\\|No m4a files\\)" line)
-                    (setq in-summary nil))
-                   (in-summary
-                    (setq summary-text (concat summary-text line "\n")))))
-                (forward-line 1))
-              (message "Captured summary text: %s"
-                       (if (string-empty-p summary-text)
-                           "Empty"
-                         (substring summary-text 0 (min 100 (length summary-text))))))
+            ;; Find the start of the summary section
+            (if (or (re-search-forward "^\\*\\*Summary for" nil t)
+                    (re-search-forward "^\\*\\*Meeting Summary" nil t))
+                (progn
+                  ;; Go back to the beginning of the line
+                  (beginning-of-line)
+                  ;; Capture everything from here to the end
+                  (setq summary-text (buffer-substring (point) (point-max))))
+              (message "No summary section found in output"))
+            (message "Captured summary text: %s"
+                     (if (string-empty-p summary-text)
+                         "Empty"
+                       (substring summary-text 0 (min 100 (length summary-text))))))
           (with-current-buffer org-buffer
             (message "Inserting summary into subtree for '%s'..." path-expanded)
             (unless (org-at-heading-p)
@@ -412,18 +408,15 @@ is nil, the temp file is deleted after successful summarization."
             (org-mode)
             (shell-command command temp-buffer)
             (goto-char (point-min))
-            (let ((in-summary nil))
-              (while (not (eobp))
-                (let ((line (buffer-substring (line-beginning-position) (line-end-position))))
-                  (cond
-                   ((string-match-p "^\\*\\*Summary for" line)
-                    (setq in-summary t)
-                    (setq summary-text (concat summary-text line "\n")))
-                   ((string-match-p "^\\* +\\(Processing\\|Error\\|Rate limit\\|No m4a files\\)" line)
-                    (setq in-summary nil))
-                   (in-summary
-                    (setq summary-text (concat summary-text line "\n")))))
-                (forward-line 1))))
+            ;; Find the start of the summary section
+            (if (or (re-search-forward "^\\*\\*Summary for" nil t)
+                    (re-search-forward "^\\*\\*Meeting Summary" nil t))
+                (progn
+                  ;; Go back to the beginning of the line
+                  (beginning-of-line)
+                  ;; Capture everything from here to the end
+                  (setq summary-text (buffer-substring (point) (point-max))))
+              (message "No summary section found in output"))))
           ;; Insert at the saved marker position
           (with-current-buffer org-buffer
             (goto-char insertion-marker)
