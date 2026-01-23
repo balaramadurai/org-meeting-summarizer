@@ -374,7 +374,7 @@ is nil, the temp file is deleted after successful summarization."
                 (display-buffer temp-buffer))))
           (unless (string-empty-p summary-text)
             (kill-buffer temp-buffer))))
-      (error "Path '%s' does not exist." path-expanded))))
+      (error "Path '%s' does not exist." path-expanded)))
 
 (defun org-meeting-summarizer-at-point (path &optional custom-prompt)
   "Summarize audio meeting files in PATH and insert summary at current cursor position.
@@ -440,9 +440,9 @@ is nil, the temp file is deleted after successful summarization."
             (setq org-meeting-summarizer--insertion-marker nil))
           (unless (string-empty-p summary-text)
             (kill-buffer temp-buffer)))
-      (error "Path '%s' does not exist." path-expanded))))
+      (error "Path '%s' does not exist." path-expanded)))
 
-(when (featurep 'hydra)
+(with-eval-after-load 'hydra
   (defhydra org-meeting-summarizer-hydra (:color blue :hint nil)
     "
 Org Meeting Summarizer
