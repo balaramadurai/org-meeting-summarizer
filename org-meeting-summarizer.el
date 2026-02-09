@@ -339,9 +339,9 @@ is nil, the temp file is deleted after successful summarization."
             (goto-char (point-min))
             (message "Raw output in *Temp Meeting Summaries*: %s"
                      (buffer-substring (point-min) (min 500 (point-max))))
-            ;; Find the start of the summary section
-            (if (or (re-search-forward "^\\*\\*Summary for" nil t)
-                    (re-search-forward "^\\*\\*Meeting Summary" nil t))
+            ;; Find the start of the summary section (single * from Python script)
+            (if (or (re-search-forward "^\\*+ ?Summary for" nil t)
+                    (re-search-forward "^\\*+ ?Meeting Summary" nil t))
                 (progn
                   ;; Go back to the beginning of the line
                   (beginning-of-line)
@@ -408,15 +408,15 @@ is nil, the temp file is deleted after successful summarization."
             (org-mode)
             (shell-command command temp-buffer)
             (goto-char (point-min))
-            ;; Find the start of the summary section
-            (if (or (re-search-forward "^\\*\\*Summary for" nil t)
-                    (re-search-forward "^\\*\\*Meeting Summary" nil t))
+            ;; Find the start of the summary section (single * from Python script)
+            (if (or (re-search-forward "^\\*+ ?Summary for" nil t)
+                    (re-search-forward "^\\*+ ?Meeting Summary" nil t))
                 (progn
                   ;; Go back to the beginning of the line
                   (beginning-of-line)
                   ;; Capture everything from here to the end
                   (setq summary-text (buffer-substring (point) (point-max))))
-              (message "No summary section found in output"))))
+              (message "No summary section found in output")))
           ;; Insert at the saved marker position
           (with-current-buffer org-buffer
             (goto-char insertion-marker)
@@ -440,24 +440,7 @@ is nil, the temp file is deleted after successful summarization."
             (setq org-meeting-summarizer--insertion-marker nil))
           (unless (string-empty-p summary-text)
             (kill-buffer temp-buffer)))
-      (error "Path '%s' does not exist." path-expanded)))
-
-(with-eval-after-load 'hydra
-  (defhydra org-meeting-summarizer-hydra (:color blue :hint nil)
-    "
-Org Meeting Summarizer
-----------------------
-_r_: Record and summarize at point
-_s_: Summarize file into subtree
-_p_: Summarize file at point
-_t_: Stop recording
-_q_: Quit
-"
-    ("r" org-meeting-summarizer-record-and-summarize "Record and summarize at point")
-    ("s" org-meeting-summarizer-in-subtree "Summarize file into subtree")
-    ("p" org-meeting-summarizer-at-point "Summarize file at point")
-    ("t" org-meeting-summarizer-stop-recording "Stop recording")
-    ("q" nil "Quit")))
+      (error "Path '%s' does not exist." path-expanded))))
 
 (provide 'org-meeting-summarizer)
 ;;; org-meeting-summarizer.el ends here
